@@ -33,6 +33,16 @@ def load_rulepack() -> dict[str, Any]:
 
 
 @lru_cache
+def s2c_message_types() -> frozenset[str]:
+    """ws_protocol.schema.json 이 정의한 서버→클라 메시지 종류.
+
+    목록을 코드에 베껴 두면 계약이 바뀔 때 조용히 어긋난다. 스키마를 직접 읽는다.
+    """
+    schema = json.loads((CONTRACTS_DIR / "ws_protocol.schema.json").read_text())
+    return frozenset(schema["$defs"]["s2c"]["properties"]["t"]["enum"])
+
+
+@lru_cache
 def required_item_codes() -> tuple[str, ...]:
     pack = load_rulepack()
     return tuple(it["code"] for it in pack["items"] if it["type"] == "required")

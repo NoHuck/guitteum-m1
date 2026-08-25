@@ -4,8 +4,9 @@ ws_protocol.schema.json 의 c2s/s2c 메시지를 다룬다.
 
 오늘 범위(replay 전용):
   1. 클라가 붙으면 hello(mode=replay) 를 기다린다.
-  2. hello 를 받으면 fixtures/ws_messages.json 25건을 그대로,
+  2. hello 를 받으면 fixtures/ws_messages.json 중 **s2c 메시지만**
      원본 seq 순서 그대로 흘려보낸다. (오디오 프레임은 여기 없음 — JSON만)
+     fixture 는 c2s·s2c 를 한 파일에 담은 양방향 예시라 그대로 흘리면 안 된다.
   3. 동시에 이 세션의 이벤트 스토어에도 봉투를 찍어 append.
      ws 메시지 자체를 그대로 저장하지 않는다 (README 원칙).
      replay 이므로 저장 원본은 fixtures/events_scenario_a.json 을 그대로 씀.
@@ -21,7 +22,7 @@ import logging
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from app.fixtures import load_scenario_events, load_ws_messages
+from app.fixtures import load_scenario_events, load_ws_messages, s2c_message_types
 from app.store import store
 
 logger = logging.getLogger("guitteum.ws")
@@ -31,7 +32,6 @@ logger = logging.getLogger("guitteum.ws")
 # 오늘 범위 밖 — 데모가 자연스럽게 보이는 정도만 맞춘다.
 _DELAY_BY_TYPE = {
     "partial": 0.15,
-    "hello": 0,
     "ready": 0.1,
 }
 _DEFAULT_DELAY = 0.35
@@ -60,6 +60,7 @@ async def handle_session(ws: WebSocket, session_id: str) -> None:
 
     store.start_session(session_id)
     messages = load_ws_messages()
+    s2c_types = s2c_message_types()
     events = load_scenario_events()
     pack_version = events[0]["pack_version"]
 
@@ -77,8 +78,11 @@ async def handle_session(ws: WebSocket, session_id: str) -> None:
 
     try:
         for msg in messages:
-            if msg["t"] == "hello":
-                continue  # 이미 받음
+            if msg["t"] not in s2c_types:
+                # c2s 메시지(hello·ask·mark_waived·pong 등). 계약상 서버는
+                # s2c 만 보낸다. 그대로 흘리면 seq 없는 메시지가 끼어들어
+                # 프런트의 "seq 는 단조 증가" 가정이 깨진다.
+                continue
             delay = _DELAY_BY_TYPE.get(msg["t"], _DEFAULT_DELAY)
             if delay:
                 await asyncio.sleep(delay)

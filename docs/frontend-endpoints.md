@@ -38,6 +38,9 @@ Content-Type: application/json
 
 받은 `ws_url`로 바로 WebSocket 연결.
 
+`mode`는 필수입니다. 바디를 안 보내거나 `replay` 외 모드를 넣으면 `422`입니다 —
+live·trace·text는 아직 서버가 안 받습니다.
+
 ---
 
 ## 2. WebSocket — `WS /ws/{session_id}` ✅ (replay만)
@@ -63,6 +66,10 @@ Content-Type: application/json
 | `ping` / `pong` | 하트비트 | 30초 무응답 시 재연결 트리거 |
 | `error` | 에러 | 아래 에러 코드 표 참조 |
 | `ended` | 세션 종료 | `/sessions/{id}/report` 호출로 전환 |
+
+**서버는 s2c 만 보냅니다.** `hello`·`ask`·`mark_waived`·`acknowledge`·`pong`·
+`text_utterance`·`resume`·`end` 는 클라가 보내는 것이라 서버에서 되돌아오지 않습니다.
+그래서 수신 메시지에는 항상 `seq` 가 있고 0부터 빈틈없이 올라갑니다.
 
 **오늘 범위(replay)에서 안 오는 것:** 오디오 바이너리 프레임. live 모드부터 필요.
 
@@ -93,7 +100,8 @@ GET /sessions/{session_id}/report
   "started_at": "...", "ended_at": "...", "duration_ms": 182000,
   "summary": {
     "items_total": 6, "met": 4, "partial": 0, "unmet": 2, "waived": 0,
-    "violations": 1, "alerts": 2, "assists_adopted": 1
+    "violations": 1, "alerts": 2, "assists_adopted": 1,
+    "comprehension": { "explained": 0, "confirmed": 1 }
   },
   "verdicts": [ { "item_code": "...", "axis": "...", "state": "...", "decided_by": "..." } ],
   "alerts_detail": [...],
@@ -101,13 +109,20 @@ GET /sessions/{session_id}/report
 }
 ```
 
+`summary.comprehension`은 이해 축(체크백) 판정 집계입니다. 누락(`omission`)과 달리
+기본값이 없어서, 이해 확인을 시도한 항목만 셉니다. `items_total`에는 안 들어갑니다.
+
 ⚠️ 세션이 아직 WS로 replay를 안 거쳤으면 `409` — 리포트는 이벤트가 있어야 나온다.
+
+⚠️ 이 응답 모양은 `contracts/api.openapi.yaml`의 `Report` 스키마와 다릅니다.
+계약은 `sections{...}` 구조를 요구합니다. 어느 쪽에 맞출지 팀 확정 전이라
+지금은 아래 모양으로 나갑니다 — 확정되면 이 문서와 함께 바뀝니다.
 
 **PDF 버전** `GET /sessions/{session_id}/report.pdf` 🚧 — 증빙용 다운로드.
 
 ---
 
-## 5. 근거 원문 — `GET /evidence/{evidence_ref}` 🚧
+## 5. 근거 원문 — `GET /evidence/{evidence_ref}` ✅
 
 alert·verdict·assist에 붙어 나오는 `evidence_ref`를 풀어서 원문 위치를 준다. **인용문 클릭 시 원문 하이라이트 기능**에 필요.
 
@@ -127,7 +142,7 @@ alert·verdict·assist에 붙어 나오는 `evidence_ref`를 풀어서 원문 �
 
 ---
 
-## 6. 팩 조회 — `GET /packs/{pack_version}` 🚧
+## 6. 팩 조회 — `GET /packs/{pack_version}` ✅
 
 체크리스트 항목 정의 원본. `rulepack.schema.json` 그대로 반환.
 
@@ -135,9 +150,9 @@ alert·verdict·assist에 붙어 나오는 `evidence_ref`를 풀어서 원문 �
 
 세션 시작 전 화면(반드시 말할 것 / 하면 안 되는 말 요약). 캐시돼 있어서 실시간 LLM 호출 없음.
 
-## 8. 심사용 프리셋 목록 — `GET /presets` 🚧
+## 8. 심사용 프리셋 목록 — `GET /presets` ✅
 
-세션 생성 시 `preset_id`로 쓸 목록. **이게 없으면 세션 생성 폼에 뭘 넣을지 프론트가 하드코딩해야 함 — 우선순위 높게 요청하세요.**
+세션 생성 시 `preset_id`로 쓸 목록. 구현됐으니 하드코딩하지 말고 이 목록에서 고르세요.
 
 ---
 
@@ -169,4 +184,6 @@ rate_limited | internal | not_found | validation_failed | conflict
 3. `ready/partial/utterance/alert/verdict/assist` 렌더
 4. `ended` 오면 `GET /sessions/{id}/report` 호출해서 요약 화면
 
-`/presets`, `/packs/{version}`, `/evidence/{ref}`는 다음 슬라이스. 현준·재호한테 우선순위 이 순서로 요청하시면 됩니다.
+`/presets`, `/packs/{version}`, `/evidence/{ref}` 도 이제 됩니다. 남은 건
+`GET /sessions/{id}`(요약 조회), `report.pdf`, `/packs/{v}/briefing` 입니다.
+필요한 순서 알려주시면 그 순서로 붙이겠습니다.

@@ -16,6 +16,9 @@ README.md: "상태는 이벤트를 접어서 다시 계산할 수 있지만,
   - alert 는 supersede 없음. 전부 센다.
   - assists_adopted 는 outcome="adopted" 인, supersede 안 된
     assist 이벤트 개수.
+  - comprehension(이해) 축은 omission 과 달리 기본값이 없다. 이해 확인을
+    시도하지 않은 항목은 unmet 이 아니라 판정 대상이 아니었던 것이므로,
+    실제로 나온 판정만 센다.
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ class SessionSummary:
     alerts: list[dict[str, Any]] = field(default_factory=list)
     assists: list[dict[str, Any]] = field(default_factory=list)
     counted: dict[str, int] = field(default_factory=dict)  # met/partial/unmet/waived
+    comprehension: dict[str, int] = field(default_factory=dict)  # explained/confirmed
     violations: int = 0
 
     def to_report(self) -> dict[str, Any]:
@@ -54,6 +58,7 @@ class SessionSummary:
                 "assists_adopted": sum(
                     1 for a in self.assists if a.get("outcome") == "adopted"
                 ),
+                "comprehension": dict(self.comprehension),
             },
             "verdicts": [
                 {"item_code": ic, "axis": ax, **v}
@@ -136,6 +141,12 @@ def fold(events: list[dict[str, Any]], required_item_codes: list[str]) -> Sessio
         state = final_verdicts.get((code, "omission"), {}).get("state", "unmet")
         counted[state] = counted.get(state, 0) + 1
     summary.counted = counted
+
+    comprehension: dict[str, int] = {"explained": 0, "confirmed": 0}
+    for (_code, axis), v in final_verdicts.items():
+        if axis == "comprehension":
+            comprehension[v["state"]] = comprehension.get(v["state"], 0) + 1
+    summary.comprehension = comprehension
 
     summary.violations = sum(
         1
