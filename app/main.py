@@ -14,12 +14,15 @@ from __future__ import annotations
 
 from fastapi import FastAPI, WebSocket
 
-from app.routes import sessions
+from app.routes import catalog, packs, sessions
 from app.ws import handle_session
 
-app = FastAPI(title="귀띔 M1 게이트웨이", version="0.1.0-replay")
+app = FastAPI(title="귀띔 M1 게이트웨이", version="0.2.0-replay")
 
 app.include_router(sessions.router)
+app.include_router(packs.router)
+app.include_router(catalog.presets_router)
+app.include_router(catalog.evidence_router)
 
 
 @app.get("/health")
